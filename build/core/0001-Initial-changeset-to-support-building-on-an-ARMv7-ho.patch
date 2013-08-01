@@ -1,0 +1,198 @@
+From fa5fb21c67a2e5d50dfe55b9ecc50ae0d7cac6d2 Mon Sep 17 00:00:00 2001
+From: Tyler Baker <tyler.baker@linaro.org>
+Date: Wed, 31 Jul 2013 18:47:18 -0700
+Subject: [PATCH] Initial changeset to support building on an ARMv7 host
+
+Change-Id: I104278c2da94f1edf3300fd462a761ed0b6980b5
+---
+ core/combo/HOST_linux-armv7l.mk |   48 +++++++++++++++++++++++++
+ core/config.mk                  |   10 +++---
+ core/envsetup.mk                |    4 +++
+ core/main.mk                    |   76 +++++++++++++++++++--------------------
+ 4 files changed, 95 insertions(+), 43 deletions(-)
+ create mode 100644 core/combo/HOST_linux-armv7l.mk
+
+diff --git a/core/combo/HOST_linux-armv7l.mk b/core/combo/HOST_linux-armv7l.mk
+new file mode 100644
+index 0000000..214aea6
+--- /dev/null
++++ b/core/combo/HOST_linux-armv7l.mk
+@@ -0,0 +1,48 @@
++#
++# Copyright (C) 2006 The Android Open Source Project
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
++# Configuration for builds hosted on linux-armv7l.
++# Included by combo/select.mk
++
++# $(1): The file to check
++define get-file-size
++stat --format "%s" "$(1)" | tr -d '\n'
++endef
++
++# Previously the prebiult host toolchain is used only for the sdk build,
++# that's why we have "sdk" in the path name.
++ifeq ($(strip $(HOST_TOOLCHAIN_PREFIX)),)
++HOST_TOOLCHAIN_PREFIX := /usr/bin
++endif
++# Don't do anything if the toolchain is not there
++ifneq (,$(strip $(wildcard $(HOST_TOOLCHAIN_PREFIX)/gcc)))
++HOST_CC  := $(HOST_TOOLCHAIN_PREFIX)/gcc
++HOST_CXX := $(HOST_TOOLCHAIN_PREFIX)/g++
++HOST_AR  := $(HOST_TOOLCHAIN_PREFIX)/ar
++endif # $(HOST_TOOLCHAIN_PREFIX)/gcc exists
++
++ifneq ($(strip $(BUILD_HOST_static)),)
++# Statically-linked binaries are desirable for sandboxed environment
++HOST_GLOBAL_LDFLAGS += -static
++endif # BUILD_HOST_static
++
++HOST_GLOBAL_CFLAGS += -fPIC \
++    -include $(call select-android-config-h,linux-arm)
++
++# Disable new longjmp in glibc 2.11 and later. See bug 2967937.
++HOST_GLOBAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
++
++HOST_NO_UNDEFINED_LDFLAGS := -Wl,--no-undefined
+diff --git a/core/config.mk b/core/config.mk
+index 8872ea9..a42d3a4 100644
+--- a/core/config.mk
++++ b/core/config.mk
+@@ -340,11 +340,11 @@ ifeq ($(HOST_OS),darwin)
+ # leave this blank
+ HOST_JDK_TOOLS_JAR :=
+ else
+-HOST_JDK_TOOLS_JAR:= $(shell $(BUILD_SYSTEM)/find-jdk-tools-jar.sh)
+-ifeq ($(wildcard $(HOST_JDK_TOOLS_JAR)),)
+-$(error Error: could not find jdk tools.jar, please install JDK6, \
+-    which you can download from java.sun.com)
+-endif
++#HOST_JDK_TOOLS_JAR:= $(shell $(BUILD_SYSTEM)/find-jdk-tools-jar.sh)
++#ifeq ($(wildcard $(HOST_JDK_TOOLS_JAR)),)
++#$(error Error: could not find jdk tools.jar, please install JDK6, \
++#    which you can download from java.sun.com)
++#endif
+ endif
+ 
+ # Is the host JDK 64-bit version?
+diff --git a/core/envsetup.mk b/core/envsetup.mk
+index f861586..c40541b 100644
+--- a/core/envsetup.mk
++++ b/core/envsetup.mk
+@@ -77,6 +77,10 @@ ifneq (,$(findstring Power,$(UNAME)))
+ 	HOST_ARCH := ppc
+ endif
+ 
++ifneq (,$(findstring armv7l,$(UNAME)))
++	HOST_ARCH := armv7l
++endif
++
+ BUILD_ARCH := $(HOST_ARCH)
+ 
+ ifeq ($(HOST_ARCH),)
+diff --git a/core/main.mk b/core/main.mk
+index 6a077e4..4456c91 100644
+--- a/core/main.mk
++++ b/core/main.mk
+@@ -140,48 +140,48 @@ $(error Directory names containing spaces not supported)
+ endif
+ 
+ # Check for the corrent jdk
+-ifneq ($(shell java -version 2>&1 | grep -i openjdk),)
+-$(info ************************************************************)
+-$(info You are attempting to build with an unsupported JDK.)
+-$(info $(space))
+-$(info You use OpenJDK but only Sun/Oracle JDK is supported.)
+-$(info Please follow the machine setup instructions at)
+-$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
+-$(info ************************************************************)
+-$(error stop)
+-endif
++#ifneq ($(shell java -version 2>&1 | grep -i openjdk),)
++#$(info ************************************************************)
++#$(info You are attempting to build with an unsupported JDK.)
++#$(info $(space))
++#$(info You use OpenJDK but only Sun/Oracle JDK is supported.)
++#$(info Please follow the machine setup instructions at)
++#$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
++#$(info ************************************************************)
++#$(error stop)
++#endif
+ 
+ # Check for the correct version of java
+-java_version := $(shell java -version 2>&1 | head -n 1 | grep '^java .*[ "]1\.6[\. "$$]')
+-ifeq ($(strip $(java_version)),)
+-$(info ************************************************************)
+-$(info You are attempting to build with the incorrect version)
+-$(info of java.)
+-$(info $(space))
+-$(info Your version is: $(shell java -version 2>&1 | head -n 1).)
+-$(info The correct version is: Java SE 1.6.)
+-$(info $(space))
+-$(info Please follow the machine setup instructions at)
+-$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
+-$(info ************************************************************)
+-$(error stop)
+-endif
++#java_version := $(shell java -version 2>&1 | head -n 1 | grep '^java .*[ "]1\.6[\. "$$]')
++#ifeq ($(strip $(java_version)),)
++#$(info ************************************************************)
++#$(info You are attempting to build with the incorrect version)
++#$(info of java.)
++#$(info $(space))
++#$(info Your version is: $(shell java -version 2>&1 | head -n 1).)
++#$(info The correct version is: Java SE 1.6.)
++#$(info $(space))
++#$(info Please follow the machine setup instructions at)
++#$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
++#$(info ************************************************************)
++#$(error stop)
++#endif
+ 
+ # Check for the correct version of javac
+-javac_version := $(shell javac -version 2>&1 | head -n 1 | grep '[ "]1\.6[\. "$$]')
+-ifeq ($(strip $(javac_version)),)
+-$(info ************************************************************)
+-$(info You are attempting to build with the incorrect version)
+-$(info of javac.)
+-$(info $(space))
+-$(info Your version is: $(shell javac -version 2>&1 | head -n 1).)
+-$(info The correct version is: 1.6.)
+-$(info $(space))
+-$(info Please follow the machine setup instructions at)
+-$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
+-$(info ************************************************************)
+-$(error stop)
+-endif
++#javac_version := $(shell javac -version 2>&1 | head -n 1 | grep '[ "]1\.6[\. "$$]')
++#ifeq ($(strip $(javac_version)),)
++#$(info ************************************************************)
++#$(info You are attempting to build with the incorrect version)
++#$(info of javac.)
++#$(info $(space))
++#$(info Your version is: $(shell javac -version 2>&1 | head -n 1).)
++#$(info The correct version is: 1.6.)
++#$(info $(space))
++#$(info Please follow the machine setup instructions at)
++#$(info $(space)$(space)$(space)$(space)https://source.android.com/source/download.html)
++#$(info ************************************************************)
++#$(error stop)
++#endif
+ 
+ ifeq (darwin,$(HOST_OS))
+ GCC_REALPATH = $(realpath $(shell which $(HOST_CC)))
+-- 
+1.7.9.5
+
